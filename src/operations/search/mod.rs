@@ -706,11 +706,25 @@ impl <'a, 'b> SearchQueryOperation<'a, 'b> {
         }
     }
 
-    /// Begins a scan with the specified query and options
     pub fn scan<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
         where T: DeserializeOwned {
 
-        self.options.push("search_type", "scan");
+        return self.scan_internal(scroll, true)
+    }
+
+    pub fn scroll<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
+        where T: DeserializeOwned {
+
+        return self.scan_internal(scroll, false)
+    }
+
+    /// Begins a scan with the specified query and options
+    fn scan_internal<T>(&'b mut self, scroll: &'b Duration, scan_search_type : bool) -> Result<ScanResult<T>, EsError>
+        where T: DeserializeOwned {
+
+        if scan_search_type {
+            self.options.push("search_type", "scan");
+        }
         self.options.push("scroll", scroll);
         let url = format!("/{}/_search{}",
                           format_indexes_and_types(&self.indexes, &self.doc_types),
