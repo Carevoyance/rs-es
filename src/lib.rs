@@ -57,11 +57,11 @@ pub mod query;
 pub mod units;
 
 use hyper::client;
+use hyper::header::{Authorization, Basic, ContentType, Headers};
 use hyper::status::StatusCode;
-use hyper::header::{Headers, Authorization, Basic};
 
-use serde::ser::Serialize;
 use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
 
 use error::EsError;
 
@@ -69,7 +69,9 @@ use url::Url;
 
 pub trait EsResponse {
     fn status_code(&self) -> &StatusCode;
-    fn read_response<R>(self) -> Result<R, EsError> where R: DeserializeOwned;
+    fn read_response<R>(self) -> Result<R, EsError>
+    where
+        R: DeserializeOwned;
 }
 
 impl EsResponse for client::response::Response {
@@ -78,8 +80,9 @@ impl EsResponse for client::response::Response {
     }
 
     fn read_response<R>(self) -> Result<R, EsError>
-        where R: DeserializeOwned {
-
+    where
+        R: DeserializeOwned,
+    {
         Ok(serde_json::from_reader(self)?)
     }
 }
@@ -96,10 +99,8 @@ pub fn do_req(resp: client::response::Response) -> Result<client::response::Resp
     let mut resp = resp;
     let status = resp.status;
     match status {
-        StatusCode::Ok |
-        StatusCode::Created |
-        StatusCode::NotFound => Ok(resp),
-        _                    => Err(EsError::from(&mut resp))
+        StatusCode::Ok | StatusCode::Created | StatusCode::NotFound => Ok(resp),
+        _ => Err(EsError::from(&mut resp)),
     }
 }
 
@@ -126,10 +127,11 @@ pub fn do_req(resp: client::response::Response) -> Result<client::response::Resp
 /// ```
 ///
 /// See the specific operations and their builder objects for details.
+#[derive(Debug)]
 pub struct Client {
-    base_url:    Url,
+    base_url: Url,
     http_client: hyper::Client,
-    headers:     Headers
+    headers: Headers,
 }
 
 /// Create a HTTP function for the given method (GET/PUT/POST/DELETE)
@@ -179,7 +181,7 @@ impl Client {
         Ok(Client {
             http_client: Self::http_client(),
             headers: Self::basic_auth(&url),
-            base_url: url
+            base_url: url,
         })
     }
 
@@ -203,15 +205,13 @@ impl Client {
         let username = url.username();
 
         if !username.is_empty() {
-            headers.set(
-                Authorization(
-                    Basic {
-                        username: username.to_owned(),
-                        password: url.password().map(|p| p.to_owned())
-                    }
-                )
-            )
+            headers.set(Authorization(Basic {
+                username: username.to_owned(),
+                password: url.password().map(|p| p.to_owned()),
+            }))
         }
+
+        headers.set(ContentType::json());
 
         headers
     }
@@ -240,9 +240,9 @@ pub mod tests {
 
     use serde_json::Value;
 
-    use super::Client;
     use super::operations::bulk::Action;
     use super::operations::search::ScanResult;
+    use super::Client;
 
     use super::query::Query;
 
@@ -253,16 +253,16 @@ pub mod tests {
     pub fn make_client() -> Client {
         let hostname = match env::var("ES_HOST") {
             Ok(val) => val,
-            Err(_)  => "http://localhost:9200".to_owned()
+            Err(_) => "http://localhost:9200".to_owned(),
         };
         Client::new(&hostname).unwrap()
     }
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct TestDocument {
-        pub str_field:  String,
-        pub int_field:  i64,
-        pub bool_field: bool
+        pub str_field: String,
+        pub int_field: i64,
+        pub bool_field: bool,
     }
 
     impl TestDocument {
@@ -270,7 +270,7 @@ pub mod tests {
             TestDocument {
                 str_field: "I am a test".to_owned(),
                 int_field: 1,
-                bool_field: true
+                bool_field: true,
             }
         }
 
@@ -293,12 +293,19 @@ pub mod tests {
     pub fn setup_test_data(client: &mut Client, index_name: &str) {
         // TODO - this should use the Bulk API
         let documents = vec![
-            TestDocument::new().with_str_field("Document A123").with_int_field(1),
-            TestDocument::new().with_str_field("Document B456").with_int_field(2),
-            TestDocument::new().with_str_field("Document 1ABC").with_int_field(3)
-                ];
+            TestDocument::new()
+                .with_str_field("Document A123")
+                .with_int_field(1),
+            TestDocument::new()
+                .with_str_field("Document B456")
+                .with_int_field(2),
+            TestDocument::new()
+                .with_str_field("Document 1ABC")
+                .with_int_field(3),
+        ];
         for ref doc in documents {
-            client.index(index_name, "test_type")
+            client
+                .index(index_name, "test_type")
                 .with_doc(doc)
                 .send()
                 .unwrap();
@@ -311,16 +318,18 @@ pub mod tests {
         let _ = env_logger::init();
 
         let scroll = Duration::minutes(1);
-        let mut scan:ScanResult<Value> = match client.search_query()
+        let mut scan: ScanResult<Value> = match client
+            .search_query()
             .with_indexes(&[test_idx])
             .with_query(&Query::build_match_all().build())
-            .scan(&scroll) {
-                Ok(scan) => scan,
-                Err(e) => {
-                    warn!("Scan error: {:?}", e);
-                    return // Ignore not-found errors
-                }
-            };
+            .scan(&scroll)
+        {
+            Ok(scan) => scan,
+            Err(e) => {
+                warn!("Scan error: {:?}", e);
+                return; // Ignore not-found errors
+            }
+        };
 
         loop {
             let page = scan.scroll(&mut client, &scroll).unwrap();
