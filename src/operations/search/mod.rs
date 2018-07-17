@@ -511,6 +511,21 @@ impl<'a> Source<'a> {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct ScrollQuerySlice {
+    pub id : usize,
+    pub max : usize,
+}
+
+impl ScrollQuerySlice {
+    pub fn new(id : usize, max : usize) -> ScrollQuerySlice {
+        ScrollQuerySlice{
+            id: id,
+            max: max,
+        }
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 struct SearchQueryOperationBody<'b> {
     /// The query
@@ -563,7 +578,11 @@ struct SearchQueryOperationBody<'b> {
 
     /// Version
     #[serde(skip_serializing_if="ShouldSkip::should_skip")]
-    version: Option<bool>
+    version: Option<bool>,
+
+    // Slice, for scrolling
+    #[serde(skip_serializing_if="ShouldSkip::should_skip")]
+    slice: Option<&'b ScrollQuerySlice>,
 }
 
 #[derive(Debug)]
@@ -665,6 +684,11 @@ impl <'a, 'b> SearchQueryOperation<'a, 'b> {
     /// To include and exclude: `with_source(Source::filter(&["include"], &["exclude"]))`
     pub fn with_source(&'b mut self, source: Source<'b>) -> &'b mut Self {
         self.body.source = Some(source);
+        self
+    }
+
+    pub fn with_scroll_slice(&'b mut self, slice: &'b ScrollQuerySlice) -> &'b mut Self {
+        self.body.slice = Some(slice);
         self
     }
 
