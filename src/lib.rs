@@ -35,7 +35,7 @@ pub mod units;
 
 use std::time;
 
-use reqwest::{RequestBuilder, StatusCode, Url};
+use reqwest::{header::CONTENT_TYPE, RequestBuilder, StatusCode, Url};
 
 use serde::{de::DeserializeOwned, ser::Serialize};
 
@@ -115,7 +115,7 @@ impl Client {
     ) -> Result<reqwest::Response, EsError> {
         let url = self.full_url(url);
         let username = self.base_url.username();
-        let mut method = action(url);
+        let mut method = action(url).header(CONTENT_TYPE, "application/json");
         if !username.is_empty() {
             method = method.basic_auth(username, self.base_url.password());
         }
