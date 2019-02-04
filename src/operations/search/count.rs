@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Ben Ashford
+ * Copyright 2015-2018 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,20 @@
 
 //! Implementations of the Count API
 
-use hyper::status::StatusCode;
+use reqwest::StatusCode;
 
-use ::{Client, EsResponse};
-use ::error::EsError;
-use ::json::ShouldSkip;
-use ::query::Query;
-use ::operations::common::{Options, OptionVal};
-use ::operations::{format_indexes_and_types, ShardCountResult};
+use serde_derive::{Deserialize, Serialize};
+
+use crate::{
+    error::EsError,
+    json::ShouldSkip,
+    operations::{
+        common::{OptionVal, Options},
+        format_indexes_and_types, ShardCountResult,
+    },
+    query::Query,
+    Client, EsResponse,
+};
 
 /// Representing a count operation
 #[derive(Debug)]
@@ -31,16 +37,16 @@ pub struct CountURIOperation<'a, 'b> {
     client: &'a mut Client,
     indexes: &'b [&'b str],
     doc_types: &'b [&'b str],
-    options: Options<'b>
+    options: Options<'b>,
 }
 
 impl<'a, 'b> CountURIOperation<'a, 'b> {
     pub fn new(client: &'a mut Client) -> CountURIOperation<'a, 'b> {
         CountURIOperation {
-            client:    client,
-            indexes:   &[],
+            client: client,
+            indexes: &[],
             doc_types: &[],
-            options:   Options::new()
+            options: Options::new(),
         }
     }
 
@@ -67,15 +73,19 @@ impl<'a, 'b> CountURIOperation<'a, 'b> {
     add_option!(with_terminate_after, "terminate_after");
 
     pub fn send(&'b mut self) -> Result<CountResult, EsError> {
-        let url = format!("/{}/_count{}",
-                          format_indexes_and_types(&self.indexes, &self.doc_types),
-                          self.options);
-        info!("Counting with: {}", url);
+        let url = format!(
+            "/{}/_count{}",
+            format_indexes_and_types(&self.indexes, &self.doc_types),
+            self.options
+        );
+        log::info!("Counting with: {}", url);
         let response = self.client.get_op(&url)?;
         match response.status_code() {
-            &StatusCode::Ok => Ok(response.read_response()?),
-            _ => Err(EsError::EsError(format!("Unexpected status: {}",
-                                              response.status_code())))
+            StatusCode::OK => Ok(response.read_response()?),
+            status_code => Err(EsError::EsError(format!(
+                "Unexpected status: {}",
+                status_code
+            ))),
         }
     }
 }
@@ -83,7 +93,7 @@ impl<'a, 'b> CountURIOperation<'a, 'b> {
 #[derive(Debug, Default, Serialize)]
 struct CountQueryOperationBody<'b> {
     /// The query
-    #[serde(skip_serializing_if="ShouldSkip::should_skip")]
+    #[serde(skip_serializing_if = "ShouldSkip::should_skip")]
     query: Option<&'b Query>,
 }
 
@@ -102,17 +112,17 @@ pub struct CountQueryOperation<'a, 'b> {
     options: Options<'b>,
 
     /// The query body
-    body: CountQueryOperationBody<'b>
+    body: CountQueryOperationBody<'b>,
 }
 
-impl <'a, 'b> CountQueryOperation<'a, 'b> {
+impl<'a, 'b> CountQueryOperation<'a, 'b> {
     pub fn new(client: &'a mut Client) -> CountQueryOperation<'a, 'b> {
         CountQueryOperation {
-            client:    client,
-            indexes:   &[],
+            client: client,
+            indexes: &[],
             doc_types: &[],
-            options:   Options::new(),
-            body:      Default::default()
+            options: Options::new(),
+            body: Default::default(),
         }
     }
 
@@ -140,31 +150,34 @@ impl <'a, 'b> CountQueryOperation<'a, 'b> {
 
     /// Performs the count with the specified query and options
     pub fn send(&'b mut self) -> Result<CountResult, EsError> {
-        let url = format!("/{}/_count{}",
-                          format_indexes_and_types(&self.indexes, &self.doc_types),
-                          self.options);
+        let url = format!(
+            "/{}/_count{}",
+            format_indexes_and_types(&self.indexes, &self.doc_types),
+            self.options
+        );
         let response = self.client.post_body_op(&url, &self.body)?;
         match response.status_code() {
-            &StatusCode::Ok => Ok(response.read_response()?),
-            _ => Err(EsError::EsError(format!("Unexpected status: {}",
-                                              response.status_code())))
+            StatusCode::OK => Ok(response.read_response()?),
+            status_code => Err(EsError::EsError(format!(
+                "Unexpected status: {}",
+                status_code
+            ))),
         }
     }
-
 }
 
 impl Client {
     /// Count via the query parameter
     ///
     /// See: https://www.elastic.co/guide/en/elasticsearch/reference/1.x/search-uri-request.html
-    pub fn count_uri<'a>(&'a mut self) -> CountURIOperation {
+    pub fn count_uri(&mut self) -> CountURIOperation {
         CountURIOperation::new(self)
     }
 
     /// Count via the query DSL
     ///
     /// See: https://www.elastic.co/guide/en/elasticsearch/reference/1.x/search-request-body.html
-    pub fn count_query<'a>(&'a mut self) -> CountQueryOperation {
+    pub fn count_query(&mut self) -> CountQueryOperation {
         CountQueryOperation::new(self)
     }
 }
@@ -173,19 +186,16 @@ impl Client {
 pub struct CountResult {
     pub count: u64,
 
-    #[serde(rename="_shards")]
-    pub shards: ShardCountResult
+    #[serde(rename = "_shards")]
+    pub shards: ShardCountResult,
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-    extern crate regex;
+    use crate::tests::setup_test_data;
+    use crate::tests::{clean_db, make_client};
 
-    use ::tests::{clean_db, make_client};
-    use ::tests::setup_test_data;
-
-    use ::query::Query;
+    use crate::query::Query;
 
     use super::CountResult;
 
@@ -240,10 +250,12 @@ mod tests {
         let doc_1: CountResult = client
             .count_query()
             .with_indexes(&[index_name])
-            .with_query(&Query::build_range("int_field")
-                        .with_gte(2)
-                        .with_lte(3)
-                        .build())
+            .with_query(
+                &Query::build_range("int_field")
+                    .with_gte(2)
+                    .with_lte(3)
+                    .build(),
+            )
             .send()
             .unwrap();
         assert_eq!(2, doc_1.count);
@@ -251,9 +263,7 @@ mod tests {
         let not_found_doc: CountResult = client
             .count_query()
             .with_indexes(&[index_name])
-            .with_query(&Query::build_range("int_field")
-                        .with_gte(99)
-                        .build())
+            .with_query(&Query::build_range("int_field").with_gte(99).build())
             .send()
             .unwrap();
         assert_eq!(0, not_found_doc.count);
