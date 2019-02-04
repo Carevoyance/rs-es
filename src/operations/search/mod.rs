@@ -542,16 +542,13 @@ impl<'a> Source<'a> {
 
 #[derive(Debug, Serialize)]
 pub struct ScrollQuerySlice {
-    pub id : usize,
-    pub max : usize,
+    pub id: usize,
+    pub max: usize,
 }
 
 impl ScrollQuerySlice {
-    pub fn new(id : usize, max : usize) -> ScrollQuerySlice {
-        ScrollQuerySlice{
-            id: id,
-            max: max,
-        }
+    pub fn new(id: usize, max: usize) -> ScrollQuerySlice {
+        ScrollQuerySlice { id: id, max: max }
     }
 }
 
@@ -613,7 +610,7 @@ struct SearchQueryOperationBody<'b> {
     version: Option<bool>,
 
     // Slice, for scrolling
-    #[serde(skip_serializing_if="ShouldSkip::should_skip")]
+    #[serde(skip_serializing_if = "ShouldSkip::should_skip")]
     slice: Option<&'b ScrollQuerySlice>,
 }
 
@@ -765,7 +762,7 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
                             None => {
                                 return Err(EsError::EsError(
                                     "No aggs despite being in results".to_owned(),
-                                ))
+                                ));
                             }
                         };
                         Some(AggregationsResult::from(req_aggs, raw_aggs)?)
@@ -784,23 +781,28 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
     }
 
     pub fn scan<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
-        where T: DeserializeOwned {
-
-        return self.scan_internal(scroll, true)
-    }
-
-    pub fn scroll<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
-        where T: DeserializeOwned {
-
-        return self.scan_internal(scroll, false)
-    }
-
-    /// Begins a scan with the specified query and options
-    fn scan_internal<T>(&'b mut self, scroll: &'b Duration, scan_search_type : bool) -> Result<ScanResult<T>, EsError>
     where
         T: DeserializeOwned,
     {
+        return self.scan_internal(scroll, true);
+    }
 
+    pub fn scroll<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
+    where
+        T: DeserializeOwned,
+    {
+        return self.scan_internal(scroll, false);
+    }
+
+    /// Begins a scan with the specified query and options
+    fn scan_internal<T>(
+        &'b mut self,
+        scroll: &'b Duration,
+        scan_search_type: bool,
+    ) -> Result<ScanResult<T>, EsError>
+    where
+        T: DeserializeOwned,
+    {
         if scan_search_type {
             self.options.push("search_type", "scan");
         }
@@ -821,7 +823,7 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
                             None => {
                                 return Err(EsError::EsError(
                                     "No aggs despite being in results".to_owned(),
-                                ))
+                                ));
                             }
                         };
                         Some(AggregationsResult::from(req_aggs, raw_aggs)?)
