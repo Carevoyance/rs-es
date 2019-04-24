@@ -115,7 +115,7 @@ impl Client {
     ) -> Result<reqwest::Response, EsError> {
         let url = self.full_url(url);
         let username = self.base_url.username();
-        let mut method = action(url).header(CONTENT_TYPE, "application/json");
+        let mut method = action(url);
         if !username.is_empty() {
             method = method.basic_auth(username, self.base_url.password());
         }
