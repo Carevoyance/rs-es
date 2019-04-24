@@ -119,7 +119,7 @@ impl Client {
         if !username.is_empty() {
             method = method.basic_auth(username, self.base_url.password());
         }
-        let result = method.send()?;
+        let result = method.header(CONTENT_TYPE, "application/json").send()?;
         do_req(result)
     }
 }
