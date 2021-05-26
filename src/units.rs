@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018 Ben Ashford
+ * Copyright 2015-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use serde_derive::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
 use crate::{error::EsError, operations::common::OptionVal};
@@ -78,38 +77,35 @@ pub struct Duration {
 }
 
 impl Duration {
-    pub fn new(amt: i64, unit: DurationUnit) -> Duration {
-        Duration {
-            amt: amt,
-            unit: unit,
-        }
+    pub fn new(amt: i64, unit: DurationUnit) -> Self {
+        Duration { amt, unit }
     }
 
-    pub fn months(amt: i64) -> Duration {
+    pub fn months(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Month)
     }
 
-    pub fn weeks(amt: i64) -> Duration {
+    pub fn weeks(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Week)
     }
 
-    pub fn days(amt: i64) -> Duration {
+    pub fn days(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Day)
     }
 
-    pub fn hours(amt: i64) -> Duration {
+    pub fn hours(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Hour)
     }
 
-    pub fn minutes(amt: i64) -> Duration {
+    pub fn minutes(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Minute)
     }
 
-    pub fn seconds(amt: i64) -> Duration {
+    pub fn seconds(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Second)
     }
 
-    pub fn milliseconds(amt: i64) -> Duration {
+    pub fn milliseconds(amt: i64) -> Self {
         Duration::new(amt, DurationUnit::Millisecond)
     }
 }
@@ -252,7 +248,7 @@ impl Serialize for GeoBox {
 
 /// A non-specific holder for an option which can either be a single thing, or
 /// multiple instances of that thing.
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub enum OneOrMany<T> {
     One(T),
     Many(Vec<T>),
@@ -292,7 +288,7 @@ impl<T> From<Vec<T>> for OneOrMany<T> {
 }
 
 /// DistanceType
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub enum DistanceType {
     SloppyArc,
     Arc,
@@ -314,7 +310,7 @@ impl Serialize for DistanceType {
 }
 
 /// DistanceUnit
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub enum DistanceUnit {
     Mile,
     Yard,
@@ -360,18 +356,15 @@ impl Serialize for DistanceUnit {
 }
 
 /// Distance, both an amount and a unit
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Distance {
     amt: f64,
     unit: DistanceUnit,
 }
 
 impl Distance {
-    pub fn new(amt: f64, unit: DistanceUnit) -> Distance {
-        Distance {
-            amt: amt,
-            unit: unit,
-        }
+    pub fn new(amt: f64, unit: DistanceUnit) -> Self {
+        Distance { amt, unit }
     }
 }
 

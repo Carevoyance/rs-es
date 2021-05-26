@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018 Ben Ashford
+ * Copyright 2015-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,8 +42,8 @@
 
 use std::collections::BTreeMap;
 
-use serde::ser::{Serialize, SerializeMap, Serializer};
-use serde_derive::Serialize;
+use serde::ser::{SerializeMap, Serializer};
+use serde::Serialize;
 
 use crate::{json::ShouldSkip, util::StrJoin};
 
@@ -148,7 +148,7 @@ impl Serialize for MinimumShouldMatch {
             MinimumShouldMatch::Combination(ref comb) => comb.serialize(serializer),
             MinimumShouldMatch::MultipleCombination(ref combs) => combs
                 .iter()
-                .map(|c| c.to_string())
+                .map(ToString::to_string)
                 .join(" ")
                 .serialize(serializer),
             MinimumShouldMatch::LowHigh(low, high) => {

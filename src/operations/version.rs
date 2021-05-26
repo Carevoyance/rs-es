@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Ben Ashford
+ * Copyright 2016-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 //! Fetch ElasticSearch version information
 
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use crate::{error::EsError, Client, EsResponse};
 
@@ -27,7 +27,7 @@ pub struct VersionOperation<'a> {
 
 impl<'a> VersionOperation<'a> {
     pub fn new(client: &'a mut Client) -> Self {
-        VersionOperation { client: client }
+        VersionOperation { client }
     }
 
     pub fn send(&mut self) -> Result<VersionResult, EsError> {
@@ -47,7 +47,10 @@ impl Client {
 pub struct Version {
     pub number: String,
     pub build_hash: String,
+    #[cfg(not(feature = "es5"))]
     pub build_timestamp: String,
+    #[cfg(feature = "es5")]
+    pub build_date: String,
     pub build_snapshot: bool,
     pub lucene_version: String,
 }
@@ -56,6 +59,8 @@ pub struct Version {
 pub struct VersionResult {
     pub name: String,
     pub cluster_name: String,
+    #[cfg(feature = "es5")]
+    pub cluster_uuid: String,
     pub version: Version,
     pub tagline: String,
 }
@@ -70,7 +75,7 @@ pub mod tests {
         let mut client = make_client();
         let result = client.version().send().unwrap();
 
-        let expected_regex = Regex::new(r"^\d\.\d\.\d$").unwrap();
+        let expected_regex = Regex::new(r"^\d\.\d\.\d+$").unwrap();
         assert_eq!(expected_regex.is_match(&result.version.number), true);
     }
 }

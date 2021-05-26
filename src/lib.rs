@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018 Ben Ashford
+ * Copyright 2015-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,13 @@
 //!
 //! Warning: at the time of writing the majority of such APIs are currently
 //! unimplemented.
+
+#[cfg(test)]
+#[macro_use]
+extern crate doc_comment;
+
+#[cfg(test)]
+doctest!("../README.md");
 
 #[macro_use]
 pub mod util;
@@ -101,7 +108,7 @@ fn do_req(resp: reqwest::Response) -> Result<reqwest::Response, EsError> {
 /// ```
 ///
 /// See the specific operations and their builder objects for details.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     base_url: Url,
     http_client: reqwest::Client,
@@ -144,6 +151,7 @@ macro_rules! es_body_op {
 
             log::info!("Doing {} on {}", stringify!($n), url);
             let json_string = serde_json::to_string(body)?;
+            log::debug!("With body: {}", &json_string);
 
             self.do_es_op(url, |url| {
                 self.http_client.$cn(url.clone()).body(json_string)
@@ -199,15 +207,9 @@ impl Client {
 pub mod tests {
     use std::env;
 
-    use serde_derive::{Deserialize, Serialize};
-    use serde_json::Value;
+    use serde::{Deserialize, Serialize};
 
-    use super::{
-        operations::{bulk::Action, search::ScanResult},
-        query::Query,
-        units::Duration,
-        Client,
-    };
+    use super::{error::EsError, Client};
 
     // test setup
 
@@ -226,7 +228,7 @@ pub mod tests {
         pub bool_field: bool,
     }
 
-    #[allow(clippy::new_without_default_derive)]
+    #[allow(clippy::new_without_default)]
     impl TestDocument {
         pub fn new() -> TestDocument {
             TestDocument {
@@ -275,38 +277,14 @@ pub mod tests {
         client.refresh().with_indexes(&[index_name]).send().unwrap();
     }
 
-    pub fn clean_db(mut client: &mut Client, test_idx: &str) {
-        let scroll = Duration::minutes(1);
-        let mut scan: ScanResult<Value> = match client
-            .search_query()
-            .with_indexes(&[test_idx])
-            .with_query(&Query::build_match_all().build())
-            .scan(&scroll)
-        {
-            Ok(scan) => scan,
-            Err(e) => {
-                log::warn!("Scan error: {:?}", e);
-                return; // Ignore not-found errors
+    pub fn clean_db(client: &mut Client, test_idx: &str) {
+        match client.delete_index(test_idx) {
+            // Ignore indices which don't exist yet
+            Err(EsError::EsError(ref msg)) if msg == "Unexpected status: 404 Not Found" => {}
+            Ok(_) => {}
+            e => {
+                e.unwrap_or_else(|_| panic!("Failed to clean db for index {:?}", test_idx));
             }
         };
-
-        loop {
-            let page = scan.scroll(&mut client, &scroll).unwrap();
-            let hits = page.hits.hits;
-            if hits.is_empty() {
-                break;
-            }
-            let actions: Vec<Action<()>> = hits
-                .into_iter()
-                .map(|hit| {
-                    Action::delete(hit.id)
-                        .with_index(test_idx)
-                        .with_doc_type(hit.doc_type)
-                })
-                .collect();
-            client.bulk(&actions).send().unwrap();
-        }
-
-        scan.close(&mut client).unwrap();
     }
 }

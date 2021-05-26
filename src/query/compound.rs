@@ -17,14 +17,13 @@
 //! Compound queries
 
 use serde::{Serialize, Serializer};
-use serde_derive::Serialize;
 
 use crate::{json::ShouldSkip, units::OneOrMany};
 
 use super::{functions::Function, MinimumShouldMatch, Query, ScoreMode};
 
 /// BoostMode
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum BoostMode {
     Multiply,
     Replace,

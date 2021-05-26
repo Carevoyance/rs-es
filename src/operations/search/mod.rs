@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018 Ben Ashford
+ * Copyright 2015-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,7 @@ use std::fmt::Debug;
 
 use reqwest::StatusCode;
 
-use serde::{
-    de::DeserializeOwned,
-    ser::{Serialize, Serializer},
-};
-use serde_derive::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, ser::Serializer, Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
@@ -180,11 +176,11 @@ pub struct SortFieldInner {
 
 impl SortField {
     /// Create a `SortField` for a given `field` and `order`
-    pub fn new<S: Into<String>>(field: S, order: Option<Order>) -> SortField {
+    pub fn new<S: Into<String>>(field: S, order: Option<Order>) -> Self {
         SortField(FieldBased::new(
             field.into(),
             SortFieldInner {
-                order: order,
+                order,
                 ..Default::default()
             },
             NoOuter,
@@ -253,7 +249,7 @@ impl GeoDistance {
     }
 
     pub fn with_locations<L: Into<Location>>(mut self, location: Vec<L>) -> Self {
-        self.location = OneOrMany::Many(location.into_iter().map(|l| l.into()).collect());
+        self.location = OneOrMany::Many(location.into_iter().map(Into::into).collect());
         self
     }
 
@@ -357,7 +353,7 @@ impl Serialize for Sort {
 
 impl Sort {
     pub fn new(fields: Vec<SortBy>) -> Self {
-        Sort { fields: fields }
+        Sort { fields }
     }
 
     /// Convenience function for a single field default
@@ -406,17 +402,17 @@ impl<'a> From<&'a Sort> for OptionVal {
     fn from(from: &'a Sort) -> OptionVal {
         // TODO - stop requiring `to_string` if `AsRef<str>` could be implemented
         // instead
-        OptionVal(from.fields.iter().map(|f| f.to_string()).join(","))
+        OptionVal(from.fields.iter().map(ToString::to_string).join(","))
     }
 }
 
 impl<'a, 'b> SearchURIOperation<'a, 'b> {
     pub fn new(client: &'a mut Client) -> SearchURIOperation<'a, 'b> {
         SearchURIOperation {
-            client: client,
+            client,
             indexes: &[],
             doc_types: &[],
-            options: Options::new(),
+            options: Options::default(),
         }
     }
 
@@ -457,6 +453,7 @@ impl<'a, 'b> SearchURIOperation<'a, 'b> {
     add_option!(with_allow_no_indices, "allow_no_indices");
     add_option!(with_expand_wildcards, "expand_wildcards");
 
+    #[cfg(not(feature = "es5"))]
     pub fn with_fields(&'b mut self, fields: &[&str]) -> &'b mut Self {
         self.options.push("fields", fields.iter().join(","));
         self
@@ -548,7 +545,7 @@ pub struct ScrollQuerySlice {
 
 impl ScrollQuerySlice {
     pub fn new(id: usize, max: usize) -> ScrollQuerySlice {
-        ScrollQuerySlice { id: id, max: max }
+        ScrollQuerySlice { id, max }
     }
 }
 
@@ -633,9 +630,9 @@ pub struct SearchQueryOperation<'a, 'b> {
 }
 
 impl<'a, 'b> SearchQueryOperation<'a, 'b> {
-    pub fn new(client: &'a mut Client) -> SearchQueryOperation<'a, 'b> {
+    pub fn new(client: &'a mut Client) -> Self {
         SearchQueryOperation {
-            client: client,
+            client,
             indexes: &[],
             doc_types: &[],
             options: Options::new(),
@@ -687,7 +684,7 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
     where
         S: ToString,
     {
-        self.body.stats = Some(stats.iter().map(|s| s.to_string()).collect());
+        self.body.stats = Some(stats.iter().map(ToString::to_string).collect());
         self
     }
 
@@ -740,6 +737,7 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
     add_option!(with_ignore_unavailable, "ignore_unavailable");
     add_option!(with_allow_no_indices, "allow_no_indices");
     add_option!(with_expand_wildcards, "expand_wildcards");
+    add_option!(with_explain, "explain");
 
     /// Performs the search with the specified query and options
     pub fn send<T>(&'b mut self) -> Result<SearchResult<T>, EsError>
@@ -780,6 +778,23 @@ impl<'a, 'b> SearchQueryOperation<'a, 'b> {
         }
     }
 
+    #[cfg(feature = "es5")]
+    pub fn scan<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        self.options.push("scroll", scroll);
+
+        // FIXME: Raise if already having a sort option
+        // let sort_by_doc = Sort::field("_doc");
+        // self.with_sort(&sort_by_doc);
+
+        let serialized = serde_json::to_string(&self.send::<T>()?)?;
+        Ok(serde_json::from_str(&serialized)?)
+    }
+
+    /// Begins a scan with the specified query and options
+    #[cfg(not(feature = "es5"))]
     pub fn scan<T>(&'b mut self, scroll: &'b Duration) -> Result<ScanResult<T>, EsError>
     where
         T: DeserializeOwned,
@@ -861,7 +876,7 @@ impl Client {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SearchHitsHitsResult<T> {
     #[serde(rename = "_index")]
     pub index: String,
@@ -875,6 +890,8 @@ pub struct SearchHitsHitsResult<T> {
     pub version: Option<u64>,
     #[serde(rename = "_source")]
     pub source: Option<Box<T>>,
+    #[serde(rename = "_explanation")]
+    pub explanation: Option<Value>,
     #[serde(rename = "_timestamp")]
     pub timestamp: Option<f64>,
     #[serde(rename = "_routing")]
@@ -883,7 +900,7 @@ pub struct SearchHitsHitsResult<T> {
     pub highlight: Option<HighlightResult>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SearchHitsResult<T> {
     pub total: u64,
     pub hits: Vec<SearchHitsHitsResult<T>>,
@@ -916,7 +933,7 @@ where
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SearchResultInterim<T> {
     pub took: u64,
     pub timed_out: bool,
@@ -950,7 +967,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SearchResult<T> {
     pub took: u64,
     pub timed_out: bool,
@@ -1064,6 +1081,7 @@ impl<T> ScanResultInterim<T>
 where
     T: DeserializeOwned,
 {
+    #[cfg(not(feature = "es5"))]
     fn finalize(self) -> ScanResult<T> {
         ScanResult {
             scroll_id: self.scroll_id,
@@ -1076,7 +1094,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct ScanResult<T> {
     pub scroll_id: String,
     pub took: u64,
@@ -1094,8 +1112,8 @@ where
     pub fn iter(self, client: &mut Client, scroll: Duration) -> ScanIterator<T> {
         ScanIterator {
             scan_result: self,
-            scroll: scroll,
-            client: client,
+            scroll,
+            client,
             page: vec![],
         }
     }
@@ -1226,6 +1244,7 @@ mod tests {
         assert_eq!(1, doc_1.hits.total);
         // TODO - add assertion for document contents
 
+        #[cfg(not(feature = "es5"))]
         let limited_fields: SearchResult<Value> = client
             .search_uri()
             .with_indexes(&[index_name])
@@ -1233,6 +1252,8 @@ mod tests {
             .with_fields(&["int_field"])
             .send()
             .unwrap();
+
+        #[cfg(not(feature = "es5"))]
         assert_eq!(1, limited_fields.hits.total);
         // TODO - add assertion for document contents
     }
@@ -1291,6 +1312,47 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "es5")]
+    fn test_scan_and_scroll() {
+        let mut client = make_client();
+        let index_name = "tests_test_scan_and_scroll";
+        crate::tests::clean_db(&mut client, index_name);
+        setup_scan_data(&mut client, index_name);
+
+        let indexes = [index_name];
+
+        let scroll = Duration::minutes(1);
+        let mut scan_result: ScanResult<TestDocument> = client
+            .search_query()
+            .with_indexes(&indexes)
+            .with_sort(&Sort::field("_doc"))
+            .with_size(100)
+            .scan(&scroll)
+            .unwrap();
+
+        assert_eq!(1000, scan_result.hits.total);
+        let mut total = 0;
+        let mut page_total = scan_result.hits.hits.len();
+
+        loop {
+            assert!(page_total > 0);
+            assert!(total <= 1000);
+
+            total += page_total;
+
+            let page = scan_result.scroll(&mut client, &scroll).unwrap();
+            page_total = page.hits.hits.len();
+
+            if page_total == 0 && total == 1000 {
+                break;
+            }
+        }
+
+        scan_result.close(&mut client).unwrap();
+    }
+
+    #[test]
+    #[cfg(not(feature = "es5"))]
     fn test_scan_and_scroll() {
         let mut client = make_client();
         let index_name = "tests_test_scan_and_scroll";
@@ -1317,6 +1379,8 @@ mod tests {
             if page_total == 0 && total == 1000 {
                 break;
             }
+
+            assert!(page_total > 0);
             assert!(total <= 1000);
         }
 
@@ -1418,7 +1482,7 @@ mod tests {
         let hits: Vec<SearchHitsHitsResult<TestDocument>> = scan_result
             .iter(&mut client, scroll)
             .take(200)
-            .map(|hit| hit.unwrap())
+            .map(Result::unwrap)
             .collect();
 
         assert_eq!(200, hits.len());
@@ -1454,6 +1518,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "es5", ignore = "need to fix mappings to not be text fields")]
     fn test_highlight() {
         let mut client = make_client();
         let index_name = "test_highlight";
@@ -1504,6 +1569,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "es5", ignore = "need to fix mappings to not be text fields")]
     fn test_bucket_aggs() {
         let mut client = make_client();
         let index_name = "test_bucket_aggs";
@@ -1625,6 +1691,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "es5", ignore = "need to fix mappings to not be text fields")]
     fn test_sort() {
         let mut client = make_client();
         let index_name = "test_sort";
@@ -1661,7 +1728,7 @@ mod tests {
 
             let expected_result_str: Vec<String> = vec!["A", "B", "C"]
                 .into_iter()
-                .map(|x| x.to_owned())
+                .map(ToOwned::to_owned)
                 .collect();
 
             assert_eq!(expected_result_str, result_str);
@@ -1684,7 +1751,7 @@ mod tests {
 
             let expected_result_str: Vec<String> = vec!["A", "B", "C"]
                 .into_iter()
-                .map(|x| x.to_owned())
+                .map(ToOwned::to_owned)
                 .collect();
 
             assert_eq!(expected_result_str, result_str);
@@ -1707,7 +1774,7 @@ mod tests {
 
             let expected_result_str: Vec<String> = vec!["C", "B", "A"]
                 .into_iter()
-                .map(|x| x.to_owned())
+                .map(ToOwned::to_owned)
                 .collect();
 
             assert_eq!(expected_result_str, result_str);

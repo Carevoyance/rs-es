@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Ben Ashford
+ * Copyright 2016-2019 Ben Ashford
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ use std::hash::Hash;
 
 use reqwest::StatusCode;
 
-use serde_derive::Serialize;
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::{error::EsError, operations::GenericResult, Client, EsResponse};
@@ -40,10 +40,12 @@ pub struct Settings {
     pub analysis: Analysis,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct Analysis {
     pub filter: Map<String, Value>,
     pub analyzer: Map<String, Value>,
+    pub tokenizer: Map<String, Value>,
+    pub char_filter: Map<String, Value>,
 }
 
 /// An indexing operation
@@ -66,8 +68,8 @@ pub struct MappingOperation<'a, 'b> {
 impl<'a, 'b> MappingOperation<'a, 'b> {
     pub fn new(client: &'a mut Client, index: &'b str) -> MappingOperation<'a, 'b> {
         MappingOperation {
-            client: client,
-            index: index,
+            client,
+            index,
             mapping: None,
             settings: None,
         }
@@ -229,6 +231,21 @@ pub mod tests {
                 })
                 .as_object()
                 .expect("by construction 'autocomplete' should be a map")
+                .clone(),
+                char_filter: serde_json::json! ({
+                    "char_filter": {
+                        "type": "pattern_replace",
+                        "pattern": ",",
+                        "replacement": " "
+                    }
+                })
+                .as_object()
+                .expect("by construction 'char_filter' should be a map")
+                .clone(),
+                tokenizer: serde_json::json! ({
+                })
+                .as_object()
+                .expect("by construction 'empty tokenizer' should be a map")
                 .clone(),
             },
         };
